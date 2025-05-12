@@ -64,6 +64,7 @@ struct sSVPublisher_ASDU {
     uint8_t smpMod;
     uint16_t smpRate;
 
+    uint8_t* svIDBuf;
     uint8_t* smpCntBuf;
     uint8_t* smpSynchBuf;
 
@@ -75,6 +76,8 @@ struct sSVPublisher {
 
     uint16_t appId;
     bool simulation;
+
+    uint8_t* appIdBuf;
 
 #if (CONFIG_IEC61850_L2_SMV == 1)
     /* only for Ethernet based SV */
@@ -170,6 +173,7 @@ preparePacketBuffer(SVPublisher self, CommParameters* parameters, const char* in
         self->buffer[bufPos++] = 0xBa;
 
         /* APPID */
+        self->appIdBuf = self->buffer + bufPos;
         self->buffer[bufPos++] = appId / 256;
         self->buffer[bufPos++] = appId % 256;
 
@@ -414,6 +418,7 @@ SVPublisher_ASDU_encodeToBuffer(SVPublisher_ASDU self, uint8_t* buffer, int bufP
     bufPos = BerEncoder_encodeTL(0x30, encodedSize, buffer, bufPos);
 
     /* svID */
+    self->svIDBuf = buffer + bufPos + 2 /* ASN tag is 2 bytes */;
     bufPos = BerEncoder_encodeStringWithTag(0x80, self->svID, buffer, bufPos);
 
     /* DatSet */
@@ -526,6 +531,37 @@ SVPublisher_setupComplete(SVPublisher self)
     }
 
     self->payloadLength = payloadLength;
+}
+
+void
+SVPublisher_getBuffer(SVPublisher self, uint8_t **buffer, int *size)
+{
+    *buffer = self->buffer;
+    *size = self->payloadStart + self->payloadLength;
+}
+
+int
+SVPublisher_getAPPID_Offset(SVPublisher self)
+{
+    return self->appIdBuf - self->buffer;
+}
+
+int
+SVPublisher_ASDU_getSVID_Offset(SVPublisher pub, SVPublisher_ASDU asdu)
+{
+    return asdu->svIDBuf - pub->buffer;
+}
+
+int
+SVPublisher_ASDU_getSmpCntOffset(SVPublisher pub, SVPublisher_ASDU asdu)
+{
+    return asdu->smpCntBuf - pub->buffer;
+}
+
+int
+SVPublisher_ASDU_getDataOffset(SVPublisher pub, SVPublisher_ASDU asdu)
+{
+    return asdu->_dataBuffer - pub->buffer;
 }
 
 void

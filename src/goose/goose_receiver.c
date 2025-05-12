@@ -1426,3 +1426,117 @@ GooseReceiver_handleMessage(GooseReceiver self, uint8_t* buffer, int size)
 {
     parseGooseMessage(self, buffer, size);
 }
+
+bool
+GooseReceiver_getMessageOffsets(uint8_t* buffer, int size, GooseMessageOffsets* offsets)
+{
+    int bufPos;
+    bool result = false;
+
+    if (size < 22)
+        return false;
+
+    offsets->appid = -1;
+    offsets->goid = -1;
+    offsets->gocb = -1;
+    offsets->dataset = -1;
+    offsets->value = -1;
+
+    /* Skip Ethernet addresses */
+    bufPos = 12;
+    int headerLength = 14;
+
+    /* Check for VLAN tag */
+    if ((buffer[bufPos] == 0x81) && (buffer[bufPos + 1] == 0x00)) {
+        bufPos += 4;
+        headerLength += 4;
+        if (size < (22 + 4))
+            return false;
+    }
+
+    /* Check for GOOSE Ethertype */
+    if (buffer[bufPos++] != 0x88 || buffer[bufPos++] != 0xb8)
+        return false;
+
+    /* APPID offset */
+    offsets->appid = bufPos;
+    bufPos += 2; /* Skip APPID */
+
+    /* Length field */
+    uint16_t length = buffer[bufPos] * 0x100 + buffer[bufPos + 1];
+    bufPos += 2;
+
+    /* Skip reserved fields */
+    bufPos += 4;
+
+    int apduLength = length - 8;
+    if (apduLength < 0 || size < length + headerLength)
+        return false;
+
+    /* Parse GOOSE PDU */
+    if (buffer[bufPos++] == 0x61) {
+        int gooseLength;
+        bufPos = BerDecoder_decodeLength(buffer, &gooseLength, bufPos, size);
+        if (bufPos < 0)
+            return false;
+
+        int gooseEnd = bufPos + gooseLength;
+
+        while (bufPos < gooseEnd) {
+            int elementLength;
+            uint8_t tag = buffer[bufPos++];
+            bufPos = BerDecoder_decodeLength(buffer, &elementLength, bufPos, size);
+            if (bufPos < 0)
+                return false;
+
+            switch (tag) {
+            case 0x80: /* gocbRef */
+                offsets->gocb = bufPos;
+                break;
+            case 0x82: /* DatSet */
+                offsets->dataset = bufPos;
+                break;
+            case 0x83: /* GoID */
+                offsets->goid = bufPos;
+                break;
+            case 0x84: /* t */
+                offsets->timestamp = bufPos;
+                break;
+            case 0x85: /* StNum */
+                offsets->stNum = bufPos;
+                break;
+            case 0x86: /* SqNum */
+                offsets->sqNum = bufPos;
+                break;
+            case 0xab: /* allData */
+                if (elementLength > 0) {
+                    int dataBufPos = bufPos;
+                    int dataEnd = dataBufPos + elementLength;
+                    while (dataBufPos < dataEnd) {
+                        uint8_t dataTag = buffer[dataBufPos++];
+                        dataBufPos = BerDecoder_decodeLength(buffer, &elementLength, dataBufPos, dataEnd);
+                        if (dataBufPos >= 0) {
+                            offsets->value = dataBufPos;
+                            result = true; /* Found all required fields */
+                            goto exit_parse;
+                        }
+                    }
+                }
+                break;
+            default:
+                break; /* Skip other tags */
+            }
+            bufPos += elementLength;
+        }
+    }
+
+exit_parse:
+    if (offsets->appid >= 0
+        && offsets->gocb >= 0
+        && offsets->dataset >= 0
+        && offsets->goid >= 0
+        && offsets->value >= 0) {
+        result = true;
+    }
+    return result;
+}

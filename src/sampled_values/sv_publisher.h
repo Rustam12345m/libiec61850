@@ -123,6 +123,23 @@ SVPublisher_addASDU(SVPublisher self, const char* svID, const char* datset, uint
 LIB61850_API void
 SVPublisher_setupComplete(SVPublisher self);
 
+
+LIB61850_API void
+SVPublisher_getBuffer(SVPublisher self, uint8_t **buffer, int *size);
+
+LIB61850_API int
+SVPublisher_getAPPID_Offset(SVPublisher self);
+
+LIB61850_API int
+SVPublisher_ASDU_getSVID_Offset(SVPublisher pub, SVPublisher_ASDU asdu);
+
+LIB61850_API int
+SVPublisher_ASDU_getSmpCntOffset(SVPublisher pub, SVPublisher_ASDU asdu);
+
+LIB61850_API int
+SVPublisher_ASDU_getDataOffset(SVPublisher pub, SVPublisher_ASDU asdu);
+
+
 /**
  * \brief Publish all registered ASDUs
  *

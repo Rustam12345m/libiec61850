@@ -121,7 +121,7 @@ GoosePublisher_publishAndDump(GoosePublisher self, LinkedList dataSet, char* msg
  * \param goID the GoId string
  */
 LIB61850_API void
-GoosePublisher_setGoID(GoosePublisher self, char* goID);
+GoosePublisher_setGoID(GoosePublisher self, const char* goID);
 
 /**
  * \brief Sets the GoCB reference used by the GoosePublisher instance
@@ -130,7 +130,7 @@ GoosePublisher_setGoID(GoosePublisher self, char* goID);
  * \param goCbRef the GoCB reference string
  */
 LIB61850_API void
-GoosePublisher_setGoCbRef(GoosePublisher self, char* goCbRef);
+GoosePublisher_setGoCbRef(GoosePublisher self, const char* goCbRef);
 
 /**
  * \brief Sets the time allowed to live value of the GOOSE messages
@@ -148,7 +148,7 @@ GoosePublisher_setTimeAllowedToLive(GoosePublisher self, uint32_t timeAllowedToL
  * \param dataSetRef the data set reference string
  */
 LIB61850_API void
-GoosePublisher_setDataSetRef(GoosePublisher self, char* dataSetRef);
+GoosePublisher_setDataSetRef(GoosePublisher self, const char* dataSetRef);
 
 /**
  * \brief Sets the configuration revision used by the GoosePublisher instance
@@ -221,6 +221,18 @@ GoosePublisher_increaseStNum(GoosePublisher self);
  */
 LIB61850_API void
 GoosePublisher_reset(GoosePublisher self);
+
+
+LIB61850_API int
+GoosePublisher_generateMessage(GoosePublisher self, CommParameters* parameters,
+                               LinkedList dataSet, uint8_t* buffer, size_t bufferSize,
+                               size_t* messageLength);
+
+LIB61850_API int
+GoosePublisher_generateRGooseMessage(GoosePublisher self, RSession session,
+                                     LinkedList dataSet, uint8_t* buffer, size_t bufferSize,
+                                     size_t* messageLength);
+
 
 #ifdef __cplusplus
 }

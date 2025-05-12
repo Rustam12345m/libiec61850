@@ -163,7 +163,7 @@ GoosePublisher_destroy(GoosePublisher self)
 }
 
 void
-GoosePublisher_setGoID(GoosePublisher self, char* goID)
+GoosePublisher_setGoID(GoosePublisher self, const char* goID)
 {
     if (self->goID)
         GLOBAL_FREEMEM(self->goID);
@@ -172,7 +172,7 @@ GoosePublisher_setGoID(GoosePublisher self, char* goID)
 }
 
 void
-GoosePublisher_setGoCbRef(GoosePublisher self, char* goCbRef)
+GoosePublisher_setGoCbRef(GoosePublisher self, const char* goCbRef)
 {
     if (self->goCBRef)
         GLOBAL_FREEMEM(self->goCBRef);
@@ -181,7 +181,7 @@ GoosePublisher_setGoCbRef(GoosePublisher self, char* goCbRef)
 }
 
 void
-GoosePublisher_setDataSetRef(GoosePublisher self, char* dataSetRef)
+GoosePublisher_setDataSetRef(GoosePublisher self, const char* dataSetRef)
 {
     if (self->dataSetRef)
         GLOBAL_FREEMEM(self->dataSetRef);
@@ -238,7 +238,8 @@ GoosePublisher_increaseStNum(GoosePublisher self)
 }
 
 void
-GoosePublisher_reset(GoosePublisher self) {
+GoosePublisher_reset(GoosePublisher self)
+{
     self->sqNum = 0;
     self->stNum = 1;
 }
@@ -547,4 +548,112 @@ GoosePublisher_publishAndDump(GoosePublisher self, LinkedList dataSet, char *msg
     }
 
     return rc;
+}
+
+int
+GoosePublisher_generateMessage(GoosePublisher self, CommParameters* parameters, LinkedList dataSet,
+                               uint8_t* buffer, size_t bufferSize, size_t* messageLength)
+{
+    if (buffer == NULL || messageLength == NULL || bufferSize < 22) /* Minimum Ethernet header size */
+        return -1;
+
+    uint8_t defaultDstAddr[] = CONFIG_GOOSE_DEFAULT_DST_ADDRESS;
+    uint8_t* dstAddr = parameters ? parameters->dstAddress : defaultDstAddr;
+    uint8_t priority = parameters ? parameters->vlanPriority : CONFIG_GOOSE_DEFAULT_PRIORITY;
+    uint16_t vlanId = parameters ? parameters->vlanId : CONFIG_GOOSE_DEFAULT_VLAN_ID;
+    uint16_t appId = parameters ? parameters->appId : CONFIG_GOOSE_DEFAULT_APPID;
+
+    /* Ethernet header */
+    int bufPos = 0;
+    memcpy(buffer, dstAddr, 6);
+    bufPos += 6;
+    bufPos += 6;
+
+    /* VLAN tag if requested */
+    if (parameters && parameters->vlanId != 0) {
+        buffer[bufPos++] = 0x81;     /* TPID */
+        buffer[bufPos++] = 0x00;
+        
+        uint8_t tci1 = priority << 5;
+        tci1 += vlanId / 256;
+        buffer[bufPos++] = tci1;
+        buffer[bufPos++] = vlanId % 256;
+    }
+
+    /* EtherType GOOSE */
+    buffer[bufPos++] = 0x88;
+    buffer[bufPos++] = 0xB8;
+
+    /* APPID */
+    buffer[bufPos++] = appId / 256;
+    buffer[bufPos++] = appId % 256;
+
+    int lengthFieldPos = bufPos;
+    bufPos += 2; /* Reserve space for length */
+
+    /* Reserved fields */
+    buffer[bufPos++] = 0x00;
+    buffer[bufPos++] = 0x00;
+    buffer[bufPos++] = 0x00;
+    buffer[bufPos++] = 0x00;
+
+    /* Generate payload */
+    int payloadLength = createGoosePayload(self, dataSet, buffer + bufPos, bufferSize - bufPos);
+    if (payloadLength < 0)
+        return -1;
+
+    /* Update length field */
+    size_t totalLength = payloadLength + 8; /* Including reserved fields */
+    buffer[lengthFieldPos] = totalLength / 256;
+    buffer[lengthFieldPos + 1] = totalLength % 256;
+
+    *messageLength = bufPos + payloadLength;
+    self->sqNum++;
+    if (self->sqNum == 0)
+        self->sqNum = 1;
+
+    return 0;
+}
+
+// R-GOOSE
+extern int
+encodePacket(RSession self, uint8_t payloadType, uint8_t* buffer, int bufPos, RSessionPayloadElement elements);
+
+int
+GoosePublisher_generateRGooseMessage(GoosePublisher self, RSession session, LinkedList dataSet,
+                                     uint8_t* buffer, size_t bufferSize, size_t* messageLength)
+{
+    if (buffer == NULL || messageLength == NULL || bufferSize < 128) /* Minimum size for R-GOOSE */
+        return -1;
+
+    /* Generate the GOOSE payload first */
+    uint8_t payloadBuffer[GOOSE_MAX_MESSAGE_SIZE];
+    int payloadLength = createGoosePayload(self, dataSet, payloadBuffer, GOOSE_MAX_MESSAGE_SIZE);
+    if (payloadLength < 0)
+        return -1;
+
+    /* Prepare RSession payload element */
+    struct sRSessionPayloadElement element = {
+        .simulation = self->simulation,
+        .appId = self->appId,
+        .payload = payloadBuffer,
+        .payloadType = 0x81, /* GOOSE APDU */
+        .payloadSize = payloadLength,
+        .nextElement = NULL
+    };
+
+    /* Use RSession encoding logic */
+    int msgSize = encodePacket(session, RSESSION_SPDU_ID_GOOSE, buffer, 0, &element);
+    if (msgSize <= 0) {
+        if (DEBUG_GOOSE_PUBLISHER)
+            printf("GOOSE_PUBLISHER: Failed to encode R-GOOSE message\n");
+        return -1;
+    }
+
+    *messageLength = msgSize;
+    self->sqNum++;
+    if (self->sqNum == 0)
+        self->sqNum = 1;
+
+    return 0;
 }

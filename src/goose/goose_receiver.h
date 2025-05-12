@@ -190,6 +190,20 @@ GooseReceiver_tick(GooseReceiver self);
 LIB61850_API void
 GooseReceiver_handleMessage(GooseReceiver self, uint8_t* buffer, int size);
 
+typedef struct {
+    int appid;      /* Offset of APPID in the Ethernet header */
+    int goid;       /* Offset of GoID in the GOOSE PDU */
+    int timestamp;  /* Offset of T in the GOOSE PDU */
+    int gocb;       /* Offset of GoCBRef in the GOOSE PDU */
+    int stNum;      /* Offset of StNum in the GOOSE PDU */
+    int sqNum;      /* Offset of SqNum in the GOOSE PDU */
+    int dataset;    /* Offset of Dataset reference in the GOOSE PDU */
+    int value;      /* Offset of the first data value in the dataset */
+} GooseMessageOffsets;
+
+LIB61850_API bool
+GooseReceiver_getMessageOffsets(uint8_t* buffer, int size, GooseMessageOffsets* offsets);
+
 /**@}*/
 
 #ifdef __cplusplus
