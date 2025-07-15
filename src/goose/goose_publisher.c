@@ -570,7 +570,7 @@ GoosePublisher_generateMessage(GoosePublisher self, CommParameters* parameters, 
     bufPos += 6;
 
     /* VLAN tag if requested */
-    if (parameters && parameters->vlanId != 0) {
+    if (parameters) {
         buffer[bufPos++] = 0x81;     /* TPID */
         buffer[bufPos++] = 0x00;
         
